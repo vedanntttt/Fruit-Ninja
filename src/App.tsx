@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import GameCanvas from './components/GameCanvas'
 import { gameAudio } from './game/audio'
 
@@ -36,6 +36,7 @@ export default function App() {
 
   return (
     <div className="h-full w-full relative bg-[#0a0a1a] text-white overflow-hidden">
+      <RotateGate />
       {screen === 'playing' && (
         <>
           <GameCanvas
@@ -95,6 +96,41 @@ export default function App() {
           </button>
         </Overlay>
       )}
+    </div>
+  )
+}
+
+/**
+ * On touch devices held in portrait, cover the screen and ask the player to
+ * rotate — the 16:9 webcam game has far more room (and the camera matches) in
+ * landscape. Never shown on desktop (fine pointer), so a tall browser window
+ * isn't blocked.
+ */
+function RotateGate() {
+  const [show, setShow] = useState(false)
+
+  useEffect(() => {
+    const touch = window.matchMedia('(pointer: coarse)')
+    const portrait = window.matchMedia('(orientation: portrait)')
+    const update = () => setShow(touch.matches && portrait.matches)
+    update()
+    portrait.addEventListener('change', update)
+    touch.addEventListener('change', update)
+    return () => {
+      portrait.removeEventListener('change', update)
+      touch.removeEventListener('change', update)
+    }
+  }, [])
+
+  if (!show) return null
+
+  return (
+    <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-[#0a0a1a] px-8 text-center">
+      <div className="text-6xl mb-6 animate-pulse">📱↻</div>
+      <h2 className="text-2xl font-bold mb-2">Rotate your phone</h2>
+      <p className="text-white/70 max-w-xs">
+        Turn your device sideways — Fruit Ninja plays best in landscape.
+      </p>
     </div>
   )
 }
