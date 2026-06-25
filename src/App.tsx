@@ -6,6 +6,34 @@ type Screen = 'start' | 'playing' | 'gameover'
 
 const HIGH_SCORE_KEY = 'fruitninja.highscore'
 
+const isCoarsePointer = () => window.matchMedia('(pointer: coarse)').matches
+
+/**
+ * Best-effort: put the page fullscreen and lock to landscape. Must be called
+ * from a user gesture. Returns false (silently) where it isn't supported —
+ * notably iOS Safari, which has no orientation lock — so callers fall back to
+ * the "please rotate" hint. No-op on desktop (fine pointer).
+ */
+async function lockLandscape(): Promise<boolean> {
+  if (!isCoarsePointer()) return false
+  try {
+    const el = document.documentElement
+    if (el.requestFullscreen && !document.fullscreenElement) {
+      await el.requestFullscreen()
+    }
+    const orientation = screen.orientation as ScreenOrientation & {
+      lock?: (o: 'landscape') => Promise<void>
+    }
+    if (typeof orientation?.lock === 'function') {
+      await orientation.lock('landscape')
+      return true
+    }
+  } catch {
+    // Unsupported / blocked — the manual rotate hint covers this case.
+  }
+  return false
+}
+
 export default function App() {
   const [screen, setScreen] = useState<Screen>('start')
   const [score, setScore] = useState(0)
@@ -19,6 +47,7 @@ export default function App() {
 
   const startGame = () => {
     gameAudio.unlock() // must happen inside a user gesture
+    void lockLandscape() // best-effort auto-rotate (no-op where unsupported)
     setScore(0)
     setLives(3)
     setRound((r) => r + 1)
@@ -101,36 +130,50 @@ export default function App() {
 }
 
 /**
- * On touch devices held in portrait, cover the screen and ask the player to
- * rotate — the 16:9 webcam game has far more room (and the camera matches) in
- * landscape. Never shown on desktop (fine pointer), so a tall browser window
- * isn't blocked.
+ * On touch devices held in portrait, suggest rotating — the 16:9 webcam game
+ * has far more room (and matches the camera) in landscape. NOT compulsory: the
+ * player can rotate automatically ("Rotate for me", where supported) or just
+ * dismiss and play in portrait. Never shown on desktop (fine pointer).
  */
 function RotateGate() {
-  const [show, setShow] = useState(false)
+  const [portrait, setPortrait] = useState(false)
+  const [dismissed, setDismissed] = useState(false)
 
   useEffect(() => {
     const touch = window.matchMedia('(pointer: coarse)')
-    const portrait = window.matchMedia('(orientation: portrait)')
-    const update = () => setShow(touch.matches && portrait.matches)
+    const orient = window.matchMedia('(orientation: portrait)')
+    const update = () => setPortrait(touch.matches && orient.matches)
     update()
-    portrait.addEventListener('change', update)
+    orient.addEventListener('change', update)
     touch.addEventListener('change', update)
     return () => {
-      portrait.removeEventListener('change', update)
+      orient.removeEventListener('change', update)
       touch.removeEventListener('change', update)
     }
   }, [])
 
-  if (!show) return null
+  if (!portrait || dismissed) return null
 
   return (
     <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-[#0a0a1a] px-8 text-center">
       <div className="text-6xl mb-6 animate-pulse">📱↻</div>
-      <h2 className="text-2xl font-bold mb-2">Rotate your phone</h2>
-      <p className="text-white/70 max-w-xs">
-        Turn your device sideways — Fruit Ninja plays best in landscape.
+      <h2 className="text-2xl font-bold mb-2">Better in landscape</h2>
+      <p className="text-white/70 max-w-xs mb-8">
+        Turn your phone sideways for more room to slice. You can keep playing in
+        portrait if you prefer.
       </p>
+      <button
+        onClick={() => void lockLandscape()}
+        className="px-8 py-3 mb-3 rounded-full bg-linear-to-r from-pink-500 to-orange-400 text-lg font-bold shadow-lg active:scale-95 transition-transform"
+      >
+        Rotate for me
+      </button>
+      <button
+        onClick={() => setDismissed(true)}
+        className="text-white/60 underline underline-offset-4 text-sm"
+      >
+        Continue in portrait
+      </button>
     </div>
   )
 }
