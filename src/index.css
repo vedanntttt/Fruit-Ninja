@@ -7,6 +7,16 @@ body,
   margin: 0;
 }
 
+/* Use the dynamic viewport unit on mobile so the layout fills the screen even
+   as the browser URL bar shows/hides (falls back to 100% on older browsers). */
+@supports (height: 100dvh) {
+  html,
+  body,
+  #root {
+    height: 100dvh;
+  }
+}
+
 body {
   background: #0a0a1a;
   overflow: hidden;
@@ -14,8 +24,8 @@ body {
   color: #fff;
   -webkit-user-select: none;
   user-select: none;
-}
-
-#root {
-  height: 100%;
+  /* Stop pull-to-refresh, rubber-band scroll, and double-tap zoom on touch. */
+  overscroll-behavior: none;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
 }

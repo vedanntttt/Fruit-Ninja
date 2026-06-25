@@ -123,12 +123,18 @@ export default function GameCanvas({
     <div className="relative h-full w-full flex items-center justify-center">
       <div
         className="relative shadow-2xl rounded-xl overflow-hidden"
-        style={{ width: 'min(96vw, 1180px)', aspectRatio: `${GAME_W} / ${GAME_H}` }}
+        style={{
+          // Fit the 16:9 box inside both the width and the height of the screen
+          // so it scales up on desktop and stays fully visible on phones.
+          width: 'min(96vw, calc(92svh * 16 / 9), 1180px)',
+          aspectRatio: `${GAME_W} / ${GAME_H}`,
+        }}
       >
         {/* Mirrored, dimmed webcam background */}
         <video
           ref={videoRef}
           playsInline
+          autoPlay
           muted
           className="absolute inset-0 h-full w-full object-cover"
           style={{ transform: 'scaleX(-1)', filter: 'brightness(0.6)' }}

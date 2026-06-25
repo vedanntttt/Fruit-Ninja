@@ -291,14 +291,18 @@ export class GameEngine {
     const emoji = FRUITS[Math.floor(Math.random() * FRUITS.length)]
     const margin = this.width * 0.15
     const x = margin + Math.random() * (this.width - margin * 2)
-    // Launch upward; aim roughly toward center-top so it arcs across.
-    const speedBoost = Math.max(0, (this.score - 100) / 100) * 1.5
-    const vy = -(13 + Math.random() * 3 + speedBoost)
+    // Launch upward toward a target apex that always stays ON-screen (in the
+    // upper 12–32% of the canvas). Deriving vy from the apex via v=√(2·g·h)
+    // guarantees the fruit peaks within view instead of flying off the top and
+    // "falling from above". Difficulty ramps via spawn rate, not launch height.
+    const launchY = this.height + 40
+    const apexY = this.height * (0.12 + Math.random() * 0.2)
+    const vy = -Math.sqrt(2 * GRAVITY * (launchY - apexY))
     const towardCenter = (this.width / 2 - x) / this.width
     const vx = towardCenter * 6 + (Math.random() - 0.5) * 4
     this.fruits.push({
       x,
-      y: this.height + 40,
+      y: launchY,
       vx,
       vy,
       emoji,

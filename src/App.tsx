@@ -45,12 +45,12 @@ export default function App() {
             onGameOver={handleGameOver}
           />
           {/* HUD overlay */}
-          <div className="pointer-events-none absolute top-0 left-0 right-0 flex items-start justify-between p-5">
-            <div className="text-3xl font-bold tracking-wide drop-shadow-[0_2px_6px_rgba(0,0,0,0.8)]">
-              <span className="text-white/60 text-base align-middle mr-2">SCORE</span>
+          <div className="pointer-events-none absolute top-0 left-0 right-0 flex items-start justify-between p-3 sm:p-5">
+            <div className="text-xl sm:text-3xl font-bold tracking-wide drop-shadow-[0_2px_6px_rgba(0,0,0,0.8)]">
+              <span className="text-white/60 text-xs sm:text-base align-middle mr-2">SCORE</span>
               {score}
             </div>
-            <div className="flex gap-1 text-3xl drop-shadow-[0_2px_6px_rgba(0,0,0,0.8)]">
+            <div className="flex gap-1 text-xl sm:text-3xl drop-shadow-[0_2px_6px_rgba(0,0,0,0.8)]">
               {[0, 1, 2].map((i) => (
                 <span key={i}>{i < lives ? '❤️' : '🖤'}</span>
               ))}
@@ -61,19 +61,19 @@ export default function App() {
 
       {screen === 'start' && (
         <Overlay>
-          <h1 className="text-6xl font-extrabold mb-3">🍉 Fruit Ninja</h1>
-          <p className="text-xl text-white/80 mb-2">Slice fruit with your finger ✋</p>
-          <p className="text-sm text-white/50 mb-8 max-w-md text-center">
+          <h1 className="text-4xl sm:text-6xl font-extrabold mb-3 text-center">🍉 Fruit Ninja</h1>
+          <p className="text-base sm:text-xl text-white/80 mb-2 text-center">Slice fruit with your finger ✋</p>
+          <p className="text-xs sm:text-sm text-white/50 mb-8 max-w-md text-center">
             Point your index finger and swipe fast through the fruit. Open your
-            whole hand ✋ for a long sweeping blade that cuts everything in its
-            path. Miss three and it's game over.
+            whole hand ✋ for a wide blade that cuts everything in its radius.
+            Miss three and it's game over. Tip: play in landscape for more room.
           </p>
           {highScore > 0 && (
             <p className="text-white/60 mb-6">High score: {highScore}</p>
           )}
           <button
             onClick={startGame}
-            className="px-10 py-4 rounded-full bg-linear-to-r from-pink-500 to-orange-400 text-xl font-bold shadow-lg hover:scale-105 active:scale-95 transition-transform"
+            className="px-8 py-3 sm:px-10 sm:py-4 rounded-full bg-linear-to-r from-pink-500 to-orange-400 text-lg sm:text-xl font-bold shadow-lg hover:scale-105 active:scale-95 transition-transform"
           >
             Start Game
           </button>
@@ -82,14 +82,14 @@ export default function App() {
 
       {screen === 'gameover' && (
         <Overlay>
-          <h1 className="text-5xl font-extrabold mb-2">Game Over</h1>
-          <p className="text-2xl text-white/80 mb-1">
+          <h1 className="text-4xl sm:text-5xl font-extrabold mb-2">Game Over</h1>
+          <p className="text-xl sm:text-2xl text-white/80 mb-1">
             Final Score: <span className="font-bold text-white">{finalScore}</span>
           </p>
           <p className="text-white/60 mb-8">High score: {highScore}</p>
           <button
             onClick={startGame}
-            className="px-10 py-4 rounded-full bg-linear-to-r from-pink-500 to-orange-400 text-xl font-bold shadow-lg hover:scale-105 active:scale-95 transition-transform"
+            className="px-8 py-3 sm:px-10 sm:py-4 rounded-full bg-linear-to-r from-pink-500 to-orange-400 text-lg sm:text-xl font-bold shadow-lg hover:scale-105 active:scale-95 transition-transform"
           >
             Play Again
           </button>
