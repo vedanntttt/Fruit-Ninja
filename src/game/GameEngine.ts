@@ -16,8 +16,7 @@ const JUICE_COLORS: Record<string, string> = {
 
 const GRAVITY = 0.32
 const VELOCITY_THRESHOLD = 16 // px/frame to count as a normal slice swipe
-const LONG_BLADE_THRESHOLD = 7 // gentler swipes cut in open-hand mode
-const LONG_BLADE_HALF = 170 // half-length (px) of the open-hand blade
+const LONG_BLADE_RADIUS = 130 // px radius of the open-hand "power" blade disc
 const TRAIL_LIFE = 15 // frames a blade-trail point lives
 // Fingertip smoothing: low-pass filter to kill MediaPipe jitter (lower = smoother
 // but laggier). Jumps beyond JUMP_BREAK in one frame are treated as a detection
@@ -357,28 +356,27 @@ export class GameEngine {
   // ---- slicing ----
 
   private detectSlices(): void {
-    const vel = this.bladeVelocity()
-    const threshold = this.tip.long ? LONG_BLADE_THRESHOLD : VELOCITY_THRESHOLD
-    if (vel < threshold) return
-
-    const tol = this.tip.long ? 16 : 13
-
     if (this.tip.long) {
-      // Open-hand: one wide bar perpendicular to motion.
-      const blade = this.bladeSegment()
-      if (!blade) return
+      // Open-hand "power" blade: cut any fruit within LONG_BLADE_RADIUS of the
+      // recent hand path (a capsule). No orientation and no velocity gate, so it
+      // reliably destroys everything in its radius instead of depending on which
+      // way the hand happened to be moving — that's what made it feel random.
+      if (this.path.length === 0) return
       for (const f of [...this.fruits]) {
         if (f.sliced) continue
-        const dist = pointSegmentDistance(f.x, f.y, blade.ax, blade.ay, blade.bx, blade.by)
-        if (dist <= f.radius + tol) this.sliceFruit(f)
+        const reach = LONG_BLADE_RADIUS + f.radius
+        if (this.pathDistance(f.x, f.y) <= reach) this.sliceFruit(f)
       }
       return
     }
 
-    // Normal mode: test fruit against every segment of the recent fingertip
-    // path, so a fast diagonal flick cuts each fruit it swept over even when the
-    // motion spans several frames. Snapshot: sliceFruit() reassigns this.fruits.
+    // Normal mode (precise blade): needs a real swipe.
+    if (this.bladeVelocity() < VELOCITY_THRESHOLD) return
     if (this.path.length < 2) return
+    const tol = 13
+    // Test fruit against every segment of the recent fingertip path, so a fast
+    // diagonal flick cuts each fruit it swept over even when the motion spans
+    // several frames. Snapshot: sliceFruit() reassigns this.fruits.
     for (const f of [...this.fruits]) {
       if (f.sliced) continue
       for (let i = 1; i < this.path.length; i++) {
@@ -392,38 +390,20 @@ export class GameEngine {
     }
   }
 
-  /**
-   * The active cutting segment.
-   * - Normal mode: the short prev→current fingertip motion segment.
-   * - Long-blade mode: a long bar centered on the fingertip, oriented
-   *   perpendicular to the motion so sweeping it cuts a wide front of fruit.
-   */
-  private bladeSegment(): { ax: number; ay: number; bx: number; by: number } | null {
-    if (!this.tip.detected) return null
-
-    if (!this.tip.long) {
-      return { ax: this.tip.prevX, ay: this.tip.prevY, bx: this.tip.x, by: this.tip.y }
+  /** Shortest distance from a point to the recent fingertip path. */
+  private pathDistance(x: number, y: number): number {
+    if (this.path.length === 0) return Infinity
+    if (this.path.length === 1) {
+      return Math.hypot(x - this.path[0].x, y - this.path[0].y)
     }
-
-    let dx = this.tip.x - this.tip.prevX
-    let dy = this.tip.y - this.tip.prevY
-    const len = Math.hypot(dx, dy)
-    if (len < 0.001) {
-      dx = 1
-      dy = 0
-    } else {
-      dx /= len
-      dy /= len
+    let min = Infinity
+    for (let i = 1; i < this.path.length; i++) {
+      const a = this.path[i - 1]
+      const b = this.path[i]
+      const d = pointSegmentDistance(x, y, a.x, a.y, b.x, b.y)
+      if (d < min) min = d
     }
-    // perpendicular to motion
-    const px = -dy
-    const py = dx
-    return {
-      ax: this.tip.x + px * LONG_BLADE_HALF,
-      ay: this.tip.y + py * LONG_BLADE_HALF,
-      bx: this.tip.x - px * LONG_BLADE_HALF,
-      by: this.tip.y - py * LONG_BLADE_HALF,
-    }
+    return min
   }
 
   private sliceFruit(f: Fruit): void {
@@ -586,23 +566,18 @@ export class GameEngine {
       ctx.stroke()
     }
 
-    // Open-hand long blade: a wide bar perpendicular to motion.
+    // Open-hand "power" blade: a glowing disc whose edge marks the exact cut
+    // radius, so what you see is what cuts (no more spinning bar).
     if (this.tip.detected && this.tip.long) {
-      const blade = this.bladeSegment()
-      if (blade) {
-        ctx.strokeStyle = 'rgba(120, 200, 255, 0.4)'
-        ctx.lineWidth = 22
-        ctx.beginPath()
-        ctx.moveTo(blade.ax, blade.ay)
-        ctx.lineTo(blade.bx, blade.by)
-        ctx.stroke()
-        ctx.strokeStyle = 'rgba(220, 245, 255, 0.95)'
-        ctx.lineWidth = 6
-        ctx.beginPath()
-        ctx.moveTo(blade.ax, blade.ay)
-        ctx.lineTo(blade.bx, blade.by)
-        ctx.stroke()
-      }
+      ctx.fillStyle = 'rgba(120, 200, 255, 0.12)'
+      ctx.beginPath()
+      ctx.arc(this.tip.x, this.tip.y, LONG_BLADE_RADIUS, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.strokeStyle = 'rgba(180, 230, 255, 0.7)'
+      ctx.lineWidth = 4
+      ctx.beginPath()
+      ctx.arc(this.tip.x, this.tip.y, LONG_BLADE_RADIUS, 0, Math.PI * 2)
+      ctx.stroke()
     }
 
     // Glowing fingertip dot (two additive circles, no shadowBlur).
