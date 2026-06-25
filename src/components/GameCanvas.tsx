@@ -37,11 +37,24 @@ export default function GameCanvas({
     const tracker = new HandTracker()
     let engine: GameEngine | null = null
 
+    // Phones do hand tracking on a weaker GPU, so request a smaller (still 16:9)
+    // camera frame — less to upload/process per frame = much smoother.
+    const isMobile =
+      /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+      (navigator.maxTouchPoints ?? 0) > 1
+    const camW = isMobile ? 640 : 1280
+    const camH = isMobile ? 360 : 720
+
     async function setup() {
       try {
         // 1) Camera
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 1280, height: 720, facingMode: 'user' },
+          video: {
+            width: { ideal: camW },
+            height: { ideal: camH },
+            aspectRatio: { ideal: GAME_W / GAME_H },
+            facingMode: 'user',
+          },
           audio: false,
         })
         // StrictMode (dev) may have already torn this effect down.
@@ -68,13 +81,19 @@ export default function GameCanvas({
         engine.start()
         setStatus('ready')
 
+        let lastFrameTime = -1
         const loop = () => {
           if (stopped || !engine) return
           // Never let a single bad frame kill the loop (which would freeze the
           // screen). Catch, log, and always reschedule.
           try {
             const now = performance.now()
-            if (video!.readyState >= 2) {
+            // Only run the (expensive) hand detector when the camera actually
+            // produced a NEW frame. The display may refresh at 60Hz while the
+            // camera is 30fps — detecting every refresh doubled the work for no
+            // benefit and was a big part of the mobile lag.
+            if (video!.readyState >= 2 && video!.currentTime !== lastFrameTime) {
+              lastFrameTime = video!.currentTime
               const hand = tracker.detect(video!, now)
               if (hand) {
                 // Mirror X because the displayed video is flipped horizontally.

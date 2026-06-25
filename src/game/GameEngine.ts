@@ -112,6 +112,7 @@ export class GameEngine {
 
   private score = 0
   private lives = 3
+  private step = 1 // physics time step, normalized to 60fps (set each tick)
   private running = false
   private spawnTimer = 0
   private spawnInterval = 1100 // ms
@@ -238,6 +239,10 @@ export class GameEngine {
   tick(now: number): boolean {
     const dt = Math.min(50, now - this.lastTime) // clamp big gaps (tab switch)
     this.lastTime = now
+    // Time step normalized to 60fps so physics runs at the same real-world speed
+    // regardless of frame rate. Without this the whole game runs at half speed on
+    // a 30fps phone (the "lag" / "not as good on phone").
+    this.step = dt > 0 ? dt / (1000 / 60) : 1
 
     if (this.running) {
       this.updateBlade()
@@ -264,7 +269,7 @@ export class GameEngine {
   }
 
   private updateTrail(): void {
-    for (const p of this.trail) p.life--
+    for (const p of this.trail) p.life -= this.step
     this.trail = this.trail.filter((p) => p.life > 0)
   }
 
@@ -317,11 +322,12 @@ export class GameEngine {
   // ---- physics updates ----
 
   private updateFruits(): void {
+    const s = this.step
     for (const f of this.fruits) {
-      f.vy += GRAVITY
-      f.x += f.vx
-      f.y += f.vy
-      f.rotation += f.rotSpeed
+      f.vy += GRAVITY * s
+      f.x += f.vx * s
+      f.y += f.vy * s
+      f.rotation += f.rotSpeed * s
     }
     // Miss detection: a falling, unsliced fruit that exits the bottom.
     for (const f of this.fruits) {
@@ -337,22 +343,24 @@ export class GameEngine {
   }
 
   private updateHalves(): void {
+    const s = this.step
     for (const h of this.halves) {
-      h.vy += GRAVITY
-      h.x += h.vx
-      h.y += h.vy
-      h.rotation += h.rotSpeed
-      h.life -= 0.012
+      h.vy += GRAVITY * s
+      h.x += h.vx * s
+      h.y += h.vy * s
+      h.rotation += h.rotSpeed * s
+      h.life -= 0.012 * s
     }
     this.halves = this.halves.filter((h) => h.life > 0 && h.y - h.radius <= this.height + 80)
   }
 
   private updateParticles(): void {
+    const s = this.step
     for (const p of this.particles) {
-      p.vy += GRAVITY * 0.6
-      p.x += p.vx
-      p.y += p.vy
-      p.life -= 0.025
+      p.vy += GRAVITY * 0.6 * s
+      p.x += p.vx * s
+      p.y += p.vy * s
+      p.life -= 0.025 * s
     }
     this.particles = this.particles.filter((p) => p.life > 0)
   }
@@ -367,22 +375,23 @@ export class GameEngine {
       // way the hand happened to be moving — that's what made it feel random.
       if (this.path.length === 0) return
       for (const f of [...this.fruits]) {
-        if (f.sliced) continue
+        if (f.sliced || this.offScreenBelow(f)) continue
         const reach = LONG_BLADE_RADIUS + f.radius
         if (this.pathDistance(f.x, f.y) <= reach) this.sliceFruit(f)
       }
       return
     }
 
-    // Normal mode (precise blade): needs a real swipe.
-    if (this.bladeVelocity() < VELOCITY_THRESHOLD) return
+    // Normal mode (precise blade): needs a real swipe. Threshold scales with the
+    // time step so it triggers at the same hand speed at any frame rate.
+    if (this.bladeVelocity() < VELOCITY_THRESHOLD * this.step) return
     if (this.path.length < 2) return
     const tol = 13
     // Test fruit against every segment of the recent fingertip path, so a fast
     // diagonal flick cuts each fruit it swept over even when the motion spans
     // several frames. Snapshot: sliceFruit() reassigns this.fruits.
     for (const f of [...this.fruits]) {
-      if (f.sliced) continue
+      if (f.sliced || this.offScreenBelow(f)) continue
       for (let i = 1; i < this.path.length; i++) {
         const a = this.path[i - 1]
         const b = this.path[i]
@@ -392,6 +401,15 @@ export class GameEngine {
         }
       }
     }
+  }
+
+  /**
+   * True while a fruit is still entirely below the bottom edge (just spawned).
+   * Prevents the open-hand disc — which reaches below the screen — from cutting
+   * fruit at the spawn point, which spammed particle bursts and froze the game.
+   */
+  private offScreenBelow(f: Fruit): boolean {
+    return f.y - f.radius > this.height
   }
 
   /** Shortest distance from a point to the recent fingertip path. */
@@ -438,10 +456,12 @@ export class GameEngine {
       })
     }
 
-    // Juice burst — 12 colored dots.
+    // Juice burst — colored dots. Skip when particles are already piling up
+    // (e.g. a wide disc cutting many fruit at once) so phones don't choke.
     const color = JUICE_COLORS[f.emoji] ?? '#ffffff'
-    for (let i = 0; i < 12; i++) {
-      const a = (Math.PI * 2 * i) / 12 + Math.random() * 0.4
+    const burst = this.particles.length > 160 ? 0 : 10
+    for (let i = 0; i < burst; i++) {
+      const a = (Math.PI * 2 * i) / burst + Math.random() * 0.4
       const speed = 2 + Math.random() * 4
       this.particles.push({
         x: f.x,
