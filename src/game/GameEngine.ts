@@ -31,6 +31,11 @@ const JUMP_BREAK = 320
 // so we don't drag a cut across the whole screen.
 const SLICE_BRIDGE_FRAMES = 4
 const SLICE_BREAK = 600
+// How many recent raw fingertip points to keep as the cutting polyline. Slicing
+// tests fruit against EVERY segment of this path (not just the last frame), so a
+// fast flick that sweeps across several frames still cuts every fruit it passed.
+// Kept short so fruit that merely drifts onto a stale segment isn't cut.
+const PATH_MAX = 6
 
 interface Fruit {
   x: number
@@ -104,6 +109,7 @@ export class GameEngine {
     lostFrames: 0, // consecutive frames with no hand
   }
   private smooth = { x: 0, y: 0, has: false } // low-pass filter state
+  private path: { x: number; y: number }[] = [] // recent raw tips = cutting polyline
 
   private score = 0
   private lives = 3
@@ -128,6 +134,7 @@ export class GameEngine {
     this.halves = []
     this.particles = []
     this.trail = []
+    this.path = []
     this.score = 0
     this.lives = 3
     this.spawnTimer = 0
@@ -167,6 +174,7 @@ export class GameEngine {
       if (this.tip.lostFrames > SLICE_BRIDGE_FRAMES) {
         this.tip.hasLast = false
         this.smooth.has = false // re-acquire fresh next time
+        this.path.length = 0 // drop stale path so we don't cut across the gap
       }
       return
     }
@@ -186,6 +194,17 @@ export class GameEngine {
     } else {
       this.tip.hadPrev = false
     }
+
+    // Extend the cutting polyline when the motion is continuous; on a fresh
+    // start or a teleport, restart it from the current point so we never join
+    // two unrelated positions into one cut.
+    if (this.tip.hadPrev) {
+      this.path.push({ x: rawX, y: rawY })
+      if (this.path.length > PATH_MAX) this.path.shift()
+    } else {
+      this.path = [{ x: rawX, y: rawY }]
+    }
+
     this.tip.x = rawX
     this.tip.y = rawY
     this.tip.lastX = rawX
@@ -339,19 +358,36 @@ export class GameEngine {
 
   private detectSlices(): void {
     const vel = this.bladeVelocity()
-    const blade = this.bladeSegment()
-    if (!blade) return
-
     const threshold = this.tip.long ? LONG_BLADE_THRESHOLD : VELOCITY_THRESHOLD
     if (vel < threshold) return
 
     const tol = this.tip.long ? 16 : 13
-    // Snapshot: sliceFruit() reassigns this.fruits, so iterate a stable copy.
+
+    if (this.tip.long) {
+      // Open-hand: one wide bar perpendicular to motion.
+      const blade = this.bladeSegment()
+      if (!blade) return
+      for (const f of [...this.fruits]) {
+        if (f.sliced) continue
+        const dist = pointSegmentDistance(f.x, f.y, blade.ax, blade.ay, blade.bx, blade.by)
+        if (dist <= f.radius + tol) this.sliceFruit(f)
+      }
+      return
+    }
+
+    // Normal mode: test fruit against every segment of the recent fingertip
+    // path, so a fast diagonal flick cuts each fruit it swept over even when the
+    // motion spans several frames. Snapshot: sliceFruit() reassigns this.fruits.
+    if (this.path.length < 2) return
     for (const f of [...this.fruits]) {
       if (f.sliced) continue
-      const dist = pointSegmentDistance(f.x, f.y, blade.ax, blade.ay, blade.bx, blade.by)
-      if (dist <= f.radius + tol) {
-        this.sliceFruit(f)
+      for (let i = 1; i < this.path.length; i++) {
+        const a = this.path[i - 1]
+        const b = this.path[i]
+        if (pointSegmentDistance(f.x, f.y, a.x, a.y, b.x, b.y) <= f.radius + tol) {
+          this.sliceFruit(f)
+          break
+        }
       }
     }
   }
